@@ -1,13 +1,13 @@
 ---
 id: 5u0q2a
 title: Phase 3 — product polish for pi-visage
-status: todo
+status: done
 priority: medium
 labels:
   - roadmap
   - phase-3
 createdAt: '2026-07-23T00:51:02.162Z'
-updatedAt: '2026-07-23T00:51:02.162Z'
+updatedAt: '2026-07-23T03:37:59.098Z'
 timeSpent: 0
 ---
 # Phase 3 — product polish for pi-visage
@@ -20,11 +20,11 @@ Backlog after Phase 1 (footer/density/splash) + Phase 2 (session header, compact
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Second+ startup page under pages/ with unique id; discoverable via /setStartUI
-- [ ] #2 At least one extra theme JSON under themes/ and loadable via /visage theme or setTheme
-- [ ] #3 /visage doctor reports theme, page id, visage.json + visage-ui.json paths without crashing non-TUI
-- [ ] #4 Optional widget or context strip only if supported by current Pi extension API; otherwise note skip in notes
-- [ ] #5 npm test still passes; pages have no top-level imports; extensions/ only factories
+- [x] #1 Second+ startup page under pages/ with unique id; discoverable via /setStartUI
+- [x] #2 At least one extra theme JSON under themes/ and loadable via /visage theme or setTheme
+- [x] #3 /visage doctor reports theme, page id, visage.json + visage-ui.json paths without crashing non-TUI
+- [x] #4 Optional widget or context strip only if supported by current Pi extension API; otherwise note skip in notes
+- [x] #5 npm test still passes; pages have no top-level imports; extensions/ only factories
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -56,5 +56,6 @@ Backlog after Phase 1 (footer/density/splash) + Phase 2 (session header, compact
 
 <!-- SECTION:NOTES:BEGIN -->
 User 2026-07-23: note Phase 3 into Knowns then push git for work elsewhere. Status of Phase1+2: shipped on main.
+Done 2026-07-23 on E:/CODE/pi-visage main@6e30fea: pages/visage-minimal; themes/visage-rose; /visage doctor (formatDoctorReport + non-TUI reportLines); /visage widget on|off via setWidget aboveEditor (default off); npm test 16/11→16 pass; pi -e print smoke ok.
 <!-- SECTION:NOTES:END -->
 
