@@ -382,3 +382,53 @@ export function formatUsageSegments(
   void density;
   return parts;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Doctor report (Phase 3)                                                      */
+/* -------------------------------------------------------------------------- */
+
+export type DoctorSnapshot = {
+  mode: string;
+  themeName: string | null;
+  pageId: string | null;
+  pageEnabled: boolean | null;
+  layout: string | null;
+  chromePath: string;
+  uiPath: string;
+  chromeExists: boolean;
+  uiExists: boolean;
+  density: string;
+  footer: boolean;
+  status: boolean;
+  widget: boolean;
+};
+
+/** Pure multi-line doctor report — safe for TUI notify or stdout. */
+export function formatDoctorReport(s: DoctorSnapshot): string[] {
+  const yn = (v: boolean | null) =>
+    v === null ? "unknown" : v ? "yes" : "no";
+  return [
+    "pi-visage doctor",
+    `  mode:       ${s.mode || "unknown"}`,
+    `  theme:      ${s.themeName ?? "unknown"}`,
+    `  page id:    ${s.pageId ?? "unknown"}`,
+    `  page on:    ${yn(s.pageEnabled)}`,
+    `  layout:     ${s.layout ?? "unknown"}`,
+    `  density:    ${s.density}`,
+    `  footer:     ${s.footer ? "on" : "off"}`,
+    `  status:     ${s.status ? "on" : "off"}`,
+    `  widget:     ${s.widget ? "on" : "off"}`,
+    `  visage.json:${s.chromeExists ? "" : " (missing)"} ${s.chromePath}`,
+    `  visage-ui:  ${s.uiExists ? "" : "(missing) "}${s.uiPath}`,
+  ];
+}
+
+/** Map /visage theme args → shipped theme id. */
+export function resolveVisageThemeId(value: string | undefined | null): string | null {
+  if (!value) return null;
+  const v = value.trim().toLowerCase();
+  if (v === "dark" || v === "visage-dark") return "visage-dark";
+  if (v === "light" || v === "visage-light") return "visage-light";
+  if (v === "rose" || v === "visage-rose") return "visage-rose";
+  return null;
+}

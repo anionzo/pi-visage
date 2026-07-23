@@ -30,7 +30,8 @@ const NORMAL_THEME = "dark";
 
 const TIPS = [
   "density: /visage density compact",
-  "theme:   /visage theme light",
+  "theme:   /visage theme rose",
+  "doctor:  /visage doctor",
   "chrome:  /visage show",
   "pages:   /setStartUI",
   "model:   /model",

@@ -38,32 +38,40 @@ import * as path from "node:path";
 
 import {
   type Density,
+  type DoctorSnapshot,
   type UsageTotals,
   addUsageToTotals,
   buildHeaderSegments,
   cacheHitRate,
   countLines,
   emptyUsageTotals,
+  formatDoctorReport,
   formatToolCallLine,
   formatToolResultLine,
   formatUsageSegments,
+  resolveVisageThemeId,
   summarizeToolArgs,
   truncate as truncStr,
 } from "../lib/chrome-helpers.ts";
 
 const STATUS_KEY = "pi-visage";
+const WIDGET_KEY = "pi-visage-ctx";
 const CONFIG_PATH = path.join(os.homedir(), ".pi", "agent", "visage.json");
+const UI_CONFIG_PATH = path.join(os.homedir(), ".pi", "agent", "visage-ui.json");
 
 type VisageConfig = {
   footer: boolean;
   status: boolean;
   density: Density;
+  /** Context strip above editor via setWidget (Phase 3). */
+  widget: boolean;
 };
 
 const DEFAULT_CONFIG: VisageConfig = {
   footer: true,
   status: true,
   density: "comfortable",
+  widget: false,
 };
 
 /** Canonical thinking levels from Pi. */
@@ -110,10 +118,84 @@ function loadConfig(): VisageConfig {
       footer: raw.footer ?? DEFAULT_CONFIG.footer,
       status: raw.status ?? DEFAULT_CONFIG.status,
       density: raw.density === "compact" ? "compact" : "comfortable",
+      widget: typeof raw.widget === "boolean" ? raw.widget : DEFAULT_CONFIG.widget,
     };
   } catch {
     return { ...DEFAULT_CONFIG };
   }
+}
+
+type UiAdapterState = {
+  selectedId: string | null;
+  enabled: boolean | null;
+  layout: string | null;
+};
+
+function loadUiAdapterState(): UiAdapterState {
+  try {
+    if (!fs.existsSync(UI_CONFIG_PATH)) {
+      return { selectedId: null, enabled: null, layout: null };
+    }
+    const raw = JSON.parse(fs.readFileSync(UI_CONFIG_PATH, "utf8")) as Record<string, unknown>;
+    return {
+      selectedId: typeof raw.selectedId === "string" ? raw.selectedId : null,
+      enabled: typeof raw.enabled === "boolean" ? raw.enabled : null,
+      layout: typeof raw.layout === "string" ? raw.layout : null,
+    };
+  } catch {
+    return { selectedId: null, enabled: null, layout: null };
+  }
+}
+
+function readThemeName(ctx: any): string | null {
+  try {
+    const t = ctx?.ui?.theme;
+    if (t && typeof t.name === "string" && t.name) return t.name;
+    if (typeof ctx?.ui?.getThemeName === "function") {
+      const n = ctx.ui.getThemeName();
+      if (typeof n === "string" && n) return n;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+/** Deliver doctor/show text without crashing when UI notify is unavailable. */
+function reportLines(ctx: any, lines: string[], type: "info" | "warning" | "error" = "info"): void {
+  const msg = lines.join("\n");
+  try {
+    if (ctx?.ui && typeof ctx.ui.notify === "function") {
+      ctx.ui.notify(msg, type);
+      return;
+    }
+  } catch {
+    // fall through
+  }
+  try {
+    console.log(msg);
+  } catch {
+    // swallow — doctor must not throw in non-TUI
+  }
+}
+
+function buildDoctorSnapshot(ctx: any, config: VisageConfig): DoctorSnapshot {
+  const uiState = loadUiAdapterState();
+  return {
+    mode: typeof ctx?.mode === "string" ? ctx.mode : "unknown",
+    themeName: readThemeName(ctx),
+    pageId: uiState.selectedId,
+    pageEnabled: uiState.enabled,
+    layout: uiState.layout,
+    chromePath: CONFIG_PATH,
+    uiPath: UI_CONFIG_PATH,
+    chromeExists: fs.existsSync(CONFIG_PATH),
+    uiExists: fs.existsSync(UI_CONFIG_PATH),
+    density: config.density,
+    footer: config.footer,
+    status: config.status,
+    widget: config.widget,
+  };
 }
 
 function saveConfig(config: VisageConfig): void {
@@ -439,8 +521,58 @@ function setIdleStatus(ctx: any, enabled: boolean, density: Density): void {
 
 function setWorkingStatus(ctx: any, enabled: boolean): void {
   if (!enabled || ctx.mode !== "tui" || !ctx.hasUI) return;
-  // Dot only; animated cat face is the page workingIndicator next to "Working..."
+  // Dot only; animated face is the page workingIndicator next to "Working..."
   ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("accent", "●"));
+}
+
+/**
+ * Optional context strip above the editor (Pi setWidget API).
+ * Off by default — enable with /visage widget on.
+ */
+function applyContextWidget(
+  pi: ExtensionAPI,
+  ctx: any,
+  enabled: boolean,
+  density: Density,
+): void {
+  if (ctx?.mode !== "tui" || !ctx?.hasUI) return;
+  if (typeof ctx.ui?.setWidget !== "function") return;
+
+  if (!enabled) {
+    try {
+      ctx.ui.setWidget(WIDGET_KEY, undefined);
+    } catch {
+      // ignore
+    }
+    return;
+  }
+
+  const label = getContextLabel(ctx);
+  const model = getProviderModel(ctx, density === "compact");
+  const thinking = formatThinking(pi.getThinkingLevel?.() ?? "off");
+
+  try {
+    ctx.ui.setWidget(
+      WIDGET_KEY,
+      (_tui: any, theme: any) => ({
+        invalidate() {},
+        render(width: number): string[] {
+          const bits = [
+            density === "compact" ? "v" : "visage",
+            label ?? "ctx —",
+            model,
+            density === "comfortable" ? thinking : "",
+          ].filter(Boolean);
+          const plain = bits.join(" · ");
+          const painted = theme.fg("dim", plain);
+          return [truncateToWidth(painted, Math.max(8, width))];
+        },
+      }),
+      { placement: "aboveEditor" },
+    );
+  } catch {
+    // API shape drift — skip quietly
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -667,6 +799,7 @@ export default function visageSkin(pi: ExtensionAPI) {
     if (sessionHeaderActive) {
       applySessionHeader(pi, ctx, config.density);
     }
+    applyContextWidget(pi, ctx, config.widget, config.density);
   };
 
   registerBuiltinToolOverrides(pi, () => config.density);
@@ -680,6 +813,7 @@ export default function visageSkin(pi: ExtensionAPI) {
     // Leave splash header to startup-ui; only footer/status here.
     applyFooter(pi, ctx, config.footer, config.density);
     setIdleStatus(ctx, config.status, config.density);
+    applyContextWidget(pi, ctx, config.widget, config.density);
   });
 
   pi.on("model_select", async (_event, ctx) => {
@@ -708,54 +842,60 @@ export default function visageSkin(pi: ExtensionAPI) {
     if (ctx.mode !== "tui") return;
     sessionHeaderActive = false;
     ctx.ui.setStatus(STATUS_KEY, undefined);
+    applyContextWidget(pi, ctx, false, config.density);
   });
 
   pi.registerCommand("visage", {
     description:
-      "Visage UI: show | footer on|off | status on|off | density | theme dark|light | header on|off",
+      "Visage UI: show | doctor | footer | status | density | theme dark|light|rose | header | widget",
     handler: async (args, ctx) => {
       const parts = args.trim().split(/\s+/).filter(Boolean);
       const [cmd, value] = parts;
 
       if (!cmd || cmd === "show") {
-        ctx.ui.notify(
-          [
-            "pi-visage",
-            `  footer:   ${config.footer ? "on" : "off"}`,
-            `  status:   ${config.status ? "on" : "off"}`,
-            `  density:  ${config.density}`,
-            `  header:   ${sessionHeaderActive ? "session" : "splash/default"}`,
-            `  model:    ${getProviderModel(ctx)}`,
-            `  thinking: ${formatThinking(pi.getThinkingLevel?.() ?? "off")}`,
-            `  transcript: theme tokens (userMessageBg/Text, muted, accent)`,
-            `  config:   ${CONFIG_PATH}`,
-          ].join("\n"),
-          "info",
-        );
+        reportLines(ctx, [
+          "pi-visage",
+          `  footer:   ${config.footer ? "on" : "off"}`,
+          `  status:   ${config.status ? "on" : "off"}`,
+          `  widget:   ${config.widget ? "on" : "off"}`,
+          `  density:  ${config.density}`,
+          `  header:   ${sessionHeaderActive ? "session" : "splash/default"}`,
+          `  model:    ${getProviderModel(ctx)}`,
+          `  thinking: ${formatThinking(pi.getThinkingLevel?.() ?? "off")}`,
+          `  transcript: theme tokens (userMessageBg/Text, muted, accent)`,
+          `  config:   ${CONFIG_PATH}`,
+          `  ui:       ${UI_CONFIG_PATH}`,
+        ]);
+        return;
+      }
+
+      if (cmd === "doctor") {
+        // Safe in TUI and non-TUI — never throws on missing notify/theme.
+        reportLines(ctx, formatDoctorReport(buildDoctorSnapshot(ctx, config)));
         return;
       }
 
       if (cmd === "footer") {
         if (value !== "on" && value !== "off") {
-          ctx.ui.notify("Usage: /visage footer on|off", "warning");
+          reportLines(ctx, ["Usage: /visage footer on|off"], "warning");
           return;
         }
         config.footer = value === "on";
         saveConfig(config);
         applyFooter(pi, ctx, config.footer, config.density);
-        ctx.ui.notify(`Footer ${config.footer ? "on" : "off"}`, "info");
+        reportLines(ctx, [`Footer ${config.footer ? "on" : "off"}`]);
         return;
       }
 
       if (cmd === "status") {
         if (value !== "on" && value !== "off") {
-          ctx.ui.notify("Usage: /visage status on|off", "warning");
+          reportLines(ctx, ["Usage: /visage status on|off"], "warning");
           return;
         }
         config.status = value === "on";
         saveConfig(config);
         setIdleStatus(ctx, config.status, config.density);
-        ctx.ui.notify(`Status chip ${config.status ? "on" : "off"}`, "info");
+        reportLines(ctx, [`Status chip ${config.status ? "on" : "off"}`]);
         return;
       }
 
@@ -763,22 +903,22 @@ export default function visageSkin(pi: ExtensionAPI) {
         if (value === "off") {
           sessionHeaderActive = false;
           if (ctx.mode === "tui" && ctx.hasUI) ctx.ui.setHeader(undefined);
-          ctx.ui.notify("Session header off (restored default/splash)", "info");
+          reportLines(ctx, ["Session header off (restored default/splash)"]);
           return;
         }
         if (value === "on" || !value) {
           sessionHeaderActive = true;
           applySessionHeader(pi, ctx, config.density);
-          ctx.ui.notify("Session header on (model · thinking · cwd)", "info");
+          reportLines(ctx, ["Session header on (model · thinking · cwd)"]);
           return;
         }
-        ctx.ui.notify("Usage: /visage header on|off", "warning");
+        reportLines(ctx, ["Usage: /visage header on|off"], "warning");
         return;
       }
 
       if (cmd === "density") {
         if (value !== "comfortable" && value !== "compact") {
-          ctx.ui.notify("Usage: /visage density comfortable|compact", "warning");
+          reportLines(ctx, ["Usage: /visage density comfortable|compact"], "warning");
           return;
         }
         config.density = value;
@@ -786,38 +926,69 @@ export default function visageSkin(pi: ExtensionAPI) {
         applyFooter(pi, ctx, config.footer, config.density);
         setIdleStatus(ctx, config.status, config.density);
         if (sessionHeaderActive) applySessionHeader(pi, ctx, config.density);
-        ctx.ui.notify(
-          `Density → ${config.density}` +
-            (config.density === "compact"
-              ? " (shorter footer + compact tool rows)"
-              : " (full footer + roomier tool rows)"),
-          "info",
+        applyContextWidget(pi, ctx, config.widget, config.density);
+        reportLines(
+          ctx,
+          [
+            `Density → ${config.density}` +
+              (config.density === "compact"
+                ? " (shorter footer + compact tool rows)"
+                : " (full footer + roomier tool rows)"),
+          ],
+        );
+        return;
+      }
+
+      if (cmd === "widget") {
+        if (value !== "on" && value !== "off") {
+          reportLines(ctx, ["Usage: /visage widget on|off"], "warning");
+          return;
+        }
+        config.widget = value === "on";
+        saveConfig(config);
+        applyContextWidget(pi, ctx, config.widget, config.density);
+        reportLines(
+          ctx,
+          [
+            `Context widget ${config.widget ? "on" : "off"}` +
+              (config.widget ? " (above editor via setWidget)" : ""),
+          ],
         );
         return;
       }
 
       if (cmd === "theme") {
-        const name = value === "light" ? "visage-light" : "visage-dark";
-        const result = ctx.ui.setTheme(name);
-        if (result && !result.success) {
-          ctx.ui.notify(result.error ?? `Failed theme ${name}`, "error");
+        const name = resolveVisageThemeId(value) ?? (value ? null : "visage-dark");
+        if (!name) {
+          reportLines(ctx, ["Usage: /visage theme dark|light|rose"], "warning");
+          return;
+        }
+        if (ctx?.mode === "tui" && ctx?.hasUI && typeof ctx.ui?.setTheme === "function") {
+          const result = ctx.ui.setTheme(name);
+          if (result && !result.success) {
+            reportLines(ctx, [result.error ?? `Failed theme ${name}`], "error");
+          } else {
+            reportLines(ctx, [`Theme → ${name}`]);
+          }
         } else {
-          ctx.ui.notify(`Theme → ${name}`, "info");
+          reportLines(ctx, [`Theme → ${name} (not applied: non-TUI)`], "warning");
         }
         return;
       }
 
-      ctx.ui.notify(
+      reportLines(
+        ctx,
         [
           "Usage:",
           "  /visage show",
+          "  /visage doctor",
           "  /visage footer on|off",
           "  /visage status on|off",
           "  /visage header on|off",
+          "  /visage widget on|off",
           "  /visage density comfortable|compact",
-          "  /visage theme dark|light",
-        ].join("\n"),
-        "info",
+          "  /visage theme dark|light|rose",
+        ],
       );
     },
   });

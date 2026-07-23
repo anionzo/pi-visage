@@ -25,11 +25,14 @@ import {
   cacheHitRate,
   formatUsageSegments,
   formatFooterTokens,
+  formatDoctorReport,
+  resolveVisageThemeId,
 } from "../lib/chrome-helpers.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DARK_PATH = path.join(ROOT, "themes", "visage-dark.json");
 const LIGHT_PATH = path.join(ROOT, "themes", "visage-light.json");
+const ROSE_PATH = path.join(ROOT, "themes", "visage-rose.json");
 
 function loadTheme(filePath) {
   const raw = fs.readFileSync(filePath, "utf8");
@@ -215,6 +218,8 @@ test("skin.ts does not register dead customType message renderers for core roles
   assert.ok(skin.includes("registerTool"));
   assert.ok(skin.includes("renderCall"));
   assert.ok(skin.includes("cacheRead") || skin.includes("formatUsageSegments"), "footer must surface prompt cache");
+  assert.ok(skin.includes('cmd === "doctor"') || skin.includes("doctor"), "must expose /visage doctor");
+  assert.ok(skin.includes("setWidget") || skin.includes("applyContextWidget"), "must wire context widget API");
   // Helpers must live outside extensions/ so Pi does not load them as factories
   assert.ok(
     fs.existsSync(path.join(ROOT, "lib", "chrome-helpers.ts")),
@@ -224,4 +229,69 @@ test("skin.ts does not register dead customType message renderers for core roles
     !fs.existsSync(path.join(ROOT, "extensions", "chrome-helpers.ts")),
     "chrome-helpers must not sit in extensions/",
   );
+});
+
+test("shipped visage-rose exposes user/assistant transcript theme tokens", () => {
+  assertTranscriptTheme(loadTheme(ROSE_PATH));
+});
+
+test("resolveVisageThemeId maps dark/light/rose aliases", () => {
+  assert.equal(resolveVisageThemeId("dark"), "visage-dark");
+  assert.equal(resolveVisageThemeId("light"), "visage-light");
+  assert.equal(resolveVisageThemeId("rose"), "visage-rose");
+  assert.equal(resolveVisageThemeId("visage-rose"), "visage-rose");
+  assert.equal(resolveVisageThemeId("nope"), null);
+});
+
+test("formatDoctorReport lists theme, page id, and both config paths", () => {
+  const lines = formatDoctorReport({
+    mode: "rpc",
+    themeName: "visage-dark",
+    pageId: "visage-minimal",
+    pageEnabled: true,
+    layout: "auto",
+    chromePath: "/tmp/visage.json",
+    uiPath: "/tmp/visage-ui.json",
+    chromeExists: true,
+    uiExists: false,
+    density: "compact",
+    footer: true,
+    status: false,
+    widget: true,
+  });
+  const blob = lines.join("\n");
+  assert.ok(blob.includes("pi-visage doctor"));
+  assert.ok(blob.includes("visage-dark"));
+  assert.ok(blob.includes("visage-minimal"));
+  assert.ok(blob.includes("/tmp/visage.json"));
+  assert.ok(blob.includes("/tmp/visage-ui.json"));
+  assert.ok(blob.includes("(missing)"));
+  assert.ok(blob.includes("rpc"));
+});
+
+test("pages stay sandboxed: no top-level import; unique ids", () => {
+  const pagesDir = path.join(ROOT, "pages");
+  const files = fs.readdirSync(pagesDir).filter((f) => f.endsWith(".ts"));
+  assert.ok(files.length >= 2, "Phase 3 needs a second startup page");
+  const ids = new Set();
+  for (const file of files) {
+    const src = fs.readFileSync(path.join(pagesDir, file), "utf8");
+    assert.ok(!/^\s*import\s/m.test(src), `${file} must not have top-level import`);
+    const m = src.match(/\bid\s*:\s*["']([^"']+)["']/);
+    assert.ok(m, `${file} must export an id`);
+    assert.ok(!ids.has(m[1]), `duplicate page id ${m[1]}`);
+    ids.add(m[1]);
+  }
+  assert.ok(ids.has("visage"));
+  assert.ok(ids.has("visage-minimal"));
+});
+
+test("extensions/ only contains factory entrypoints", () => {
+  const extDir = path.join(ROOT, "extensions");
+  const files = fs.readdirSync(extDir).filter((f) => f.endsWith(".ts"));
+  assert.deepEqual(files.sort(), ["skin.ts", "startup-ui.ts"].sort());
+  for (const file of files) {
+    const src = fs.readFileSync(path.join(extDir, file), "utf8");
+    assert.ok(/export\s+default\s+function/.test(src), `${file} must default-export a factory`);
+  }
 });

@@ -10,9 +10,11 @@ A Pi package that reskins the TUI: startup page adapter, session chrome, and mat
 | --- | --- | --- |
 | Startup adapter | extension | `extensions/startup-ui.ts` |
 | Visage splash (slime) | page | `pages/visage.ts` |
+| Visage minimal splash | page | `pages/visage-minimal.ts` |
 | Session chrome | extension | `extensions/skin.ts` |
 | Dark theme | theme | `themes/visage-dark.json` |
 | Light theme | theme | `themes/visage-light.json` |
+| Rose theme | theme | `themes/visage-rose.json` |
 
 ## Install
 
@@ -36,24 +38,27 @@ pi install git:github.com/anionzo/pi-visage
 pi install npm:pi-visage
 ```
 
-Then pick the theme in `/settings` → `visage-dark` or `visage-light`, or:
+Then pick the theme in `/settings` → `visage-dark`, `visage-light`, or `visage-rose`, or:
 
 ```text
 /visage theme dark
 /visage theme light
+/visage theme rose
 ```
 
 ## Commands
 
 | Command | Action |
 | --- | --- |
-| `/setStartUI` | Choose startup page (default: `visage`) |
+| `/setStartUI` | Choose startup page (`visage`, `visage-minimal`, …) |
 | `/visage show` | Show saved chrome config |
+| `/visage doctor` | Report theme, page id, density, and `visage.json` / `visage-ui.json` paths (safe in non-TUI) |
 | `/visage footer on\|off` | Toggle custom footer (shows ↑↓ **R**/**W**/**CH** cache when provider reports it) |
 | `/visage status on\|off` | Toggle status chip |
 | `/visage header on\|off` | Force thin session header (model · thinking · cwd) |
+| `/visage widget on\|off` | Optional context strip above the editor (`setWidget`, off by default) |
 | `/visage density comfortable\|compact` | Density for footer, session header, and built-in tool chrome (persisted + applied) |
-| `/visage theme dark\|light` | Switch Visage theme (applies transcript colors for user/assistant bubbles) |
+| `/visage theme dark\|light\|rose` | Switch Visage theme (applies transcript colors for user/assistant bubbles) |
 
 ### Transcript styling (user / assistant)
 
@@ -79,10 +84,12 @@ pi-visage/
 ├── lib/
 │   └── chrome-helpers.ts     # pure formatters (not an extension — do not put under extensions/)
 ├── pages/
-│   └── visage.ts             # default startup page (no imports)
+│   ├── visage.ts             # default slime splash (no imports)
+│   └── visage-minimal.ts     # compact one-line splash
 ├── themes/
 │   ├── visage-dark.json
-│   └── visage-light.json
+│   ├── visage-light.json
+│   └── visage-rose.json
 ├── test/
 │   └── chrome-helpers.test.mjs
 ├── .knowns/                  # Knowns project store (tasks, memory, docs)
