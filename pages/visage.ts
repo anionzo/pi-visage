@@ -5,11 +5,25 @@
  *
  * Loaded by extensions/startup-ui.ts from package pages/.
  * No import statements — helpers come from the `ui` argument.
+ *
+ * Mascot: simple slime blob (easy to read in TUI) + short working faces.
+ * Layout inspired by my-pi centered brand splash.
  */
 
 const TEAL = [94, 234, 212];
 const TEAL_SOFT = [45, 212, 191];
 const VIOLET = [196, 181, 253];
+const CREAM = [255, 232, 224];
+const CREAM_SOFT = [245, 208, 197];
+const PINK = [251, 182, 206];
+/** Face highlights — bright so eyes/mouth don’t read as black blobs. */
+const EYE_BRIGHT = [255, 255, 255];
+const EYE_GLOW = [186, 230, 253]; // soft sky
+const MOUTH_BRIGHT = [255, 200, 170]; // peach
+const MOUTH_GLOW = [253, 186, 216]; // light pink
+
+/** Soft teal/violet wash for brand + slime body. */
+const SLIME_PALETTE = [TEAL_SOFT, TEAL, VIOLET, PINK, TEAL_SOFT];
 
 const VISAGE_THEME = "visage-dark";
 const NORMAL_THEME = "dark";
@@ -20,6 +34,101 @@ const TIPS = [
   "chrome:  /visage show",
   "pages:   /setStartUI",
   "model:   /model",
+];
+
+/**
+ * Place glyphs on a fixed-width row (guarantees no ragged lines).
+ * pieces: [startCol, text]
+ */
+function placeRow(width, pieces) {
+  const cells = Array(width).fill(" ");
+  for (const [col, text] of pieces) {
+    for (let i = 0; i < text.length; i++) {
+      const at = col + i;
+      if (at >= 0 && at < width) cells[at] = text[i];
+    }
+  }
+  return cells.join("");
+}
+
+/**
+ * BIG slime — larger squat dome (user scale-up).
+ * Body = █ / rim = ▄▀ ; expression only = ▀▀ eyes + ▄▀▄ cat mouth.
+ *
+ *                      ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+ *                  ▄████████████████████████████▄
+ *                ████████████████████████████████
+ *               ██████████████████████████████████
+ *              ████████████████████████████████████
+ *             ██████████████████████████████████████
+ *             █████████████▀▀██████▀▀███████████████
+ *             ███████████████▄▄▄▄███████████████████   ← mouth all ▄ (no ▀ mix = no black holes)
+ *              ████████████████████████████████████
+ *               ▀████████████████████████████████▀
+ *                  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+ */
+const SLIME_LOGO_WIDTH = 60;
+const SLIME_LOGO_LINES = (() => {
+  const W = SLIME_LOGO_WIDTH;
+  // Max body 36 cells @ col 11
+  // Marker glyphs for paint detection: eyes use ▀, mouth uses only ▄ (never mix on one cell row)
+  const lines = [
+    placeRow(W, [[20, "▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄"]]), // 20
+    placeRow(W, [[15, "▄████████████████████████████▄"]]), // 30
+    placeRow(W, [[13, "████████████████████████████████"]]), // 32
+    placeRow(W, [[12, "██████████████████████████████████"]]), // 34
+    placeRow(W, [[11, "████████████████████████████████████"]]), // 36
+    placeRow(W, [[11, "████████████████████████████████████"]]), // 36 cheek
+    // eyes: ▀▀ · ▀▀ only (upper half — same glyph, no black gap)
+    placeRow(W, [[11, "█████████████▀▀██████▀▀█████████████"]]), // 36
+    // mouth: solid ▄▄▄▄ smile (lower half only — evenly filled, bright)
+    placeRow(W, [[11, "███████████████▄▄▄▄█████████████████"]]), // 36
+    placeRow(W, [[12, "██████████████████████████████████"]]), // 34
+    placeRow(W, [[13, "▀████████████████████████████████▀"]]), // 32
+    placeRow(W, [[17, "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"]]), // 26
+  ];
+  for (const line of lines) {
+    if (line.length !== W) throw new Error(`slime logo width ${line.length}`);
+  }
+  if (!lines[6].includes("▀▀") || !lines[7].includes("▄▄")) {
+    throw new Error("slime face pixels missing");
+  }
+  return lines;
+})();
+
+/** Medium slime — same proportions; mouth = solid ▄ only. */
+const SLIME_MED_WIDTH = 40;
+const SLIME_MED_LINES = (() => {
+  const W = SLIME_MED_WIDTH;
+  const lines = [
+    placeRow(W, [[10, "▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄"]]), // 20
+    placeRow(W, [[7, "▄████████████████████████▄"]]), // 26
+    placeRow(W, [[6, "██████████████████████████"]]), // 26
+    placeRow(W, [[5, "████████████████████████████"]]), // 28
+    placeRow(W, [[5, "████████████████████████████"]]), // 28
+    // eyes ▀▀ · ▀▀
+    placeRow(W, [[5, "██████████▀▀████▀▀██████████"]]), // 28
+    // mouth solid ▄▄▄▄
+    placeRow(W, [[5, "████████████▄▄▄▄████████████"]]), // 28
+    placeRow(W, [[6, "▀████████████████████████▀"]]), // 26
+    placeRow(W, [[9, "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"]]), // 22
+  ];
+  for (const line of lines) {
+    if (line.length !== W) throw new Error(`slime med width ${line.length}`);
+  }
+  return lines;
+})();
+
+/**
+ * Working-indicator — mini block face (still short for "Working...").
+ */
+const SLIME_WORK_FRAMES = [
+  "[▀▀]",
+  "[▄▄]",
+  "[▀▀]",
+  "[▄▄▄]",
+  "[──]",
+  "[▀▀]",
 ];
 
 function switchPiTheme(ctx, themeName) {
@@ -43,7 +152,6 @@ function providerModel(model) {
 }
 
 function pickTip() {
-  // Stable-ish per day so splash doesn't flicker every render
   const day = Math.floor(Date.now() / 86_400_000);
   return TIPS[day % TIPS.length];
 }
@@ -60,6 +168,104 @@ function contextLabel(ui, ctx) {
   } catch {
     return null;
   }
+}
+
+function mix(a, b, t) {
+  return Math.round(a + (b - a) * t);
+}
+
+function sampleGradient(position, palette) {
+  const wrapped = ((position % 1) + 1) % 1;
+  const scaled = wrapped * palette.length;
+  const index = Math.floor(scaled);
+  const next = (index + 1) % palette.length;
+  const t = scaled - index;
+  const a = palette[index];
+  const b = palette[next];
+  return [mix(a[0], b[0], t), mix(a[1], b[1], t), mix(a[2], b[2], t)];
+}
+
+function gradientText(ui, text, phase, palette) {
+  const chars = [...text];
+  const span = Math.max(chars.length - 1, 1);
+  return chars
+    .map((ch, i) => {
+      if (ch === " ") return ch;
+      const rgb = sampleGradient(i / span + phase, palette);
+      return ui.rgbText(rgb, ch);
+    })
+    .join("");
+}
+
+function centerLine(ui, line, width) {
+  if (typeof ui.centerAnsi === "function") {
+    return ui.centerAnsi(line, width);
+  }
+  const clipped =
+    ui.visibleWidth(line) > width ? ui.truncateToWidth(line, width, "") : line;
+  const pad = Math.max(0, Math.floor((width - ui.visibleWidth(clipped)) / 2));
+  return `${" ".repeat(pad)}${clipped}`;
+}
+
+/**
+ * Paint big pixel slime (face is also ▄/▀).
+ *
+ * Mouth uses only ▄▄▄▄ (same half) so the empty half of a ▀ cell never
+ * shows terminal black next to an ▄ cell. Eyes use only ▀▀.
+ *
+ * Indent is fixed from logoWidth so the sprite never drifts line-to-line.
+ */
+function renderSlimeLogo(ui, lines, logoWidth, width, phaseStep = 0.05) {
+  const blockWidth = Math.min(logoWidth, Math.max(1, width));
+  const indent = Math.max(0, Math.floor((width - blockWidth) / 2));
+  const pad = " ".repeat(indent);
+
+  return lines.map((line, row) => {
+    const padded =
+      line.length >= logoWidth
+        ? line.slice(0, logoWidth)
+        : line.padEnd(logoWidth);
+    const plain =
+      padded.length > blockWidth ? padded.slice(0, blockWidth) : padded;
+
+    // Eyes: body █ with ▀ lids. Mouth: body █ with ▄▄ smile (no ▀ on mouth row).
+    const isEyeLine = plain.includes("█▀▀") || plain.includes("▀▀█");
+    const isMouthLine =
+      plain.includes("█▄▄") && !plain.includes("▀") && /▄{2,}/.test(plain);
+    const chars = [...plain];
+    const span = Math.max(chars.length - 1, 1);
+
+    const painted = chars
+      .map((ch, i) => {
+        if (ch === " ") return ch;
+
+        // Eyes — bright white / sky, even fill
+        if (isEyeLine && ch === "▀") {
+          return ui.rgbText(EYE_BRIGHT, ch);
+        }
+
+        // Mouth — solid peach band (every ▄ same color → no dark cell)
+        if (isMouthLine && ch === "▄") {
+          return ui.rgbText(MOUTH_BRIGHT, ch);
+        }
+
+        // Dome / base rims
+        if (ch === "▀" || ch === "▄") {
+          return ui.rgbText(CREAM, ch);
+        }
+
+        if (ch === "█") {
+          const rgb = sampleGradient(i / span + row * phaseStep, SLIME_PALETTE);
+          return ui.rgbText(rgb, ch);
+        }
+
+        const rgb = sampleGradient(i / span + row * phaseStep, SLIME_PALETTE);
+        return ui.rgbText(rgb, ch);
+      })
+      .join("");
+
+    return ui.truncateToWidth(pad + painted, width, "");
+  });
 }
 
 function createFrame({ width, ui, content, title, footer, maxWidth = 96 }) {
@@ -98,57 +304,8 @@ function createFrame({ width, ui, content, title, footer, maxWidth = 96 }) {
   return [top, ...body, bottom].map((line) => ui.truncateToWidth(indent + line, width, ""));
 }
 
-function renderColumns({ width, ui, leftRows, rightRows, title, footer }) {
-  const frameWidth = Math.max(40, Math.min(96, width));
-  const innerWidth = frameWidth - 2;
-  const gap = 4;
-  const leftWidth = Math.min(18, Math.floor(innerWidth * 0.32));
-  const rightWidth = Math.max(16, innerWidth - leftWidth - gap);
-  const rowCount = Math.max(leftRows.length, rightRows.length);
-  const rows = [];
-
-  for (let index = 0; index < rowCount; index++) {
-    rows.push(
-      [
-        ui.padRightAnsi(leftRows[index] ?? "", leftWidth, ""),
-        " ".repeat(gap),
-        ui.truncateToWidth(rightRows[index] ?? "", rightWidth, ""),
-      ].join(""),
-    );
-  }
-
-  return createFrame({
-    width,
-    ui,
-    content: ["", ...rows, ""],
-    title,
-    footer,
-  });
-}
-
-function faceRows(ui) {
-  const t = (v) => ui.rgbText(TEAL, v);
-  const s = (v) => ui.rgbText(TEAL_SOFT, v);
-  const v = (v) => ui.rgbText(VIOLET, v);
-
-  return [
-    t("   ╭─────╮"),
-    t("  ╱ ") + s("•") + t("   ") + s("•") + t(" ╲"),
-    t(" │   ") + v("─") + t("   │"),
-    t("  ╲ ") + s("╰───╯") + t(" ╱"),
-    t("   ╰─────╯"),
-  ];
-}
-
-function labelValue(theme, ui, label, value, valueColor) {
-  const muted = (v) => theme.fg("muted", v);
-  const paint = valueColor || ((v) => ui.rgbText(TEAL, v));
-  return [muted(label.padEnd(10)), paint(value)].join("");
-}
-
 function cmdsRow(theme, ui, accent, soft) {
   const muted = (v) => theme.fg("muted", v);
-  // Useful discoverability: chrome + model + page picker
   return [
     muted("cmds  "),
     accent("/model"),
@@ -178,7 +335,7 @@ function splashMeta(pi, ctx, theme, ui) {
 export default {
   id: "visage",
   label: "Visage",
-  description: "Visage startup skin for Pi",
+  description: "Visage slime startup skin for Pi",
   order: 10,
   title: "Visage · PI",
 
@@ -190,6 +347,7 @@ export default {
     switchPiTheme(ctx, NORMAL_THEME);
   },
 
+  /** Full splash — centered slime + meta (my-pi style open header). */
   renderFull({ pi, ctx, theme, width, ui }) {
     const accent = (value) => ui.rgbText(TEAL, value);
     const soft = (value) => ui.rgbText(TEAL_SOFT, value);
@@ -201,75 +359,90 @@ export default {
       ui,
     );
 
-    const infoRows = [
-      soft("Visage") + muted("  pi ui skin"),
-      "",
-      labelValue(theme, ui, "model", pm, accent),
-      labelValue(theme, ui, "thinking", thinking, soft),
-      labelValue(theme, ui, "cwd", ui.shortenPath(ctx.cwd, 42), (v) =>
-        theme.fg("dim", v),
-      ),
-      labelValue(theme, ui, "theme", themeName, soft),
-    ];
-
-    if (branch) {
-      infoRows.push(
-        labelValue(theme, ui, "branch", branch, (v) => theme.fg("accent", v)),
-      );
-    }
-    if (ctxPct) {
-      infoRows.push(
-        labelValue(theme, ui, "context", ctxPct, (v) => theme.fg("dim", v)),
-      );
+    if (width < 36) {
+      return this.renderTiny({ pi, ctx, theme, width, ui });
     }
 
-    infoRows.push("");
-    infoRows.push(cmdsRow(theme, ui, accent, soft));
-    infoRows.push([muted("tip   "), theme.fg("dim", tip)].join(""));
-
-    // Face column is 5 rows; pad so face still aligns with model block
-    const left = faceRows(ui);
-    while (left.length < infoRows.length) left.push("");
-
-    return renderColumns({
-      width,
+    const brand = centerLine(
       ui,
-      leftRows: left,
-      rightRows: infoRows,
-      title: [accent("Visage"), theme.fg("dim", ` · PI v${ui.VERSION}`)].join(""),
-      footer: theme.fg("dim", "pi-visage"),
-    });
+      gradientText(ui, `Visage · PI v${ui.VERSION}`, 0.12, SLIME_PALETTE),
+      width,
+    );
+
+    const subtitleBits = [pm, thinking].filter(Boolean).join(" · ");
+    const subtitle = centerLine(
+      ui,
+      gradientText(ui, subtitleBits, 0.18, [TEAL_SOFT, TEAL, VIOLET]),
+      width,
+    );
+
+    const cwdShort = ui.shortenPath(ctx.cwd, Math.min(42, Math.max(16, width - 20)));
+    const metaParts = [cwdShort, themeName];
+    if (branch) metaParts.push(branch);
+    if (ctxPct) metaParts.push(`ctx ${ctxPct}`);
+    const meta = centerLine(ui, muted(metaParts.join(" · ")), width);
+
+    const cmds = centerLine(ui, cmdsRow(theme, ui, accent, soft), width);
+    const tipLine = centerLine(
+      ui,
+      [muted("tip  "), theme.fg("dim", tip)].join(""),
+      width,
+    );
+
+    const logo = renderSlimeLogo(ui, SLIME_LOGO_LINES, SLIME_LOGO_WIDTH, width, 0.06);
+
+    return [
+      "",
+      brand,
+      ...logo,
+      "",
+      subtitle,
+      meta,
+      "",
+      cmds,
+      tipLine,
+      "",
+    ].map((line) => ui.truncateToWidth(line, width, ""));
   },
 
+  /** Compact: framed medium slime. */
   renderCompact({ pi, ctx, theme, width, ui }) {
     const accent = (value) => ui.rgbText(TEAL, value);
     const soft = (value) => ui.rgbText(TEAL_SOFT, value);
     const muted = (value) => theme.fg("muted", value);
     const { pm, thinking, branch, themeName, tip } = splashMeta(pi, ctx, theme, ui);
 
-    const content = [
+    const frameWidth = Math.min(84, Math.max(40, width));
+    const inner = frameWidth - 2;
+
+    const logo = renderSlimeLogo(ui, SLIME_MED_LINES, SLIME_MED_WIDTH, inner, 0.08);
+
+    const info = [
+      centerLine(ui, soft("Visage") + muted("  pi ui skin"), inner),
+      centerLine(ui, [muted("model "), accent(pm)].join(""), inner),
+      centerLine(
+        ui,
+        [
+          muted("thinking "),
+          soft(thinking),
+          muted(" · "),
+          soft(themeName),
+          branch ? muted(" · ") + theme.fg("accent", branch) : "",
+        ].join(""),
+        inner,
+      ),
+      centerLine(ui, theme.fg("dim", ui.shortenPath(ctx.cwd, 40)), inner),
       "",
-      [soft("◉ "), accent("Visage"), theme.fg("dim", ` · PI v${ui.VERSION}`)].join(""),
-      [muted("model    "), accent(pm)].join(""),
-      [muted("thinking "), soft(thinking)].join(""),
-      [muted("cwd      "), theme.fg("dim", ui.shortenPath(ctx.cwd, 48))].join(""),
-      [
-        muted("theme    "),
-        soft(themeName),
-        branch ? muted(" · ") + theme.fg("accent", branch) : "",
-      ].join(""),
-      "",
-      cmdsRow(theme, ui, accent, soft),
-      [muted("tip      "), theme.fg("dim", tip)].join(""),
-      "",
+      centerLine(ui, cmdsRow(theme, ui, accent, soft), inner),
+      centerLine(ui, [muted("tip  "), theme.fg("dim", tip)].join(""), inner),
     ];
 
     return createFrame({
       width,
       ui,
-      maxWidth: 72,
-      content,
-      title: accent("Visage"),
+      maxWidth: 84,
+      content: ["", ...logo, "", ...info, ""],
+      title: [accent("Visage"), theme.fg("dim", ` · PI v${ui.VERSION}`)].join(""),
       footer: theme.fg("dim", "pi-visage"),
     });
   },
@@ -279,12 +452,17 @@ export default {
     const pm = providerModel(model);
     const accent = (value) => ui.rgbText(TEAL, value);
     const soft = (value) => ui.rgbText(TEAL_SOFT, value);
+    const slime = (value) => ui.rgbText(TEAL_SOFT, value);
     const branch =
       typeof ui.getGitBranch === "function" ? ui.getGitBranch(ctx.cwd) : null;
 
     return [
       ui.truncateToWidth(
-        [soft("◉ "), accent("Visage"), theme.fg("dim", ` · v${ui.VERSION}`)].join(""),
+        [
+          slime("[▀▀] "),
+          accent("Visage"),
+          theme.fg("dim", ` · v${ui.VERSION}`),
+        ].join(""),
         width,
         "",
       ),
@@ -314,21 +492,16 @@ export default {
     ];
   },
 
+  /** Bounce-y slime face while working. */
   workingIndicator({ ui }) {
-    const accent = (value) => ui.rgbText(TEAL, value);
-    const soft = (value) => ui.rgbText(TEAL_SOFT, value);
-    const violet = (value) => ui.rgbText(VIOLET, value);
+    const paint = (frame, index) => {
+      const palette = [TEAL_SOFT, TEAL, VIOLET, PINK, TEAL, VIOLET];
+      return ui.rgbText(palette[index % palette.length], frame) + " ";
+    };
 
     return {
-      frames: [
-        accent("◉") + " ",
-        soft("◎") + " ",
-        violet("●") + " ",
-        soft("◎") + " ",
-        accent("◉") + " ",
-        soft("○") + " ",
-      ],
-      intervalMs: 110,
+      frames: SLIME_WORK_FRAMES.map((frame, i) => paint(frame, i)),
+      intervalMs: 140,
     };
   },
 };
