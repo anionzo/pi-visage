@@ -1,8 +1,8 @@
 # pi-visage
 
-Full UI skin for [Pi](https://pi.dev): startup page, session chrome, working indicator, and matching themes.
+Full UI skin for [Pi](https://pi.dev): cat-faced startup page, session chrome, ear-wave working indicator, and matching themes.
 
-A Pi package that reskins the TUI: startup page adapter, session chrome, and matching themes.
+A Pi package that reskins the TUI: startup page adapter, session chrome, and matching themes. The splash mascot is a cream ASCII cat; while the agent works, the indicator cycles ear-wave frames.
 
 ## What's inside
 
@@ -49,7 +49,7 @@ Then pick the theme in `/settings` → `visage-dark` or `visage-light`, or:
 | --- | --- |
 | `/setStartUI` | Choose startup page (default: `visage`) |
 | `/visage show` | Show saved chrome config |
-| `/visage footer on\|off` | Toggle custom footer |
+| `/visage footer on\|off` | Toggle custom footer (shows ↑↓ **R**/**W**/**CH** cache when provider reports it) |
 | `/visage status on\|off` | Toggle status chip |
 | `/visage header on\|off` | Force thin session header (model · thinking · cwd) |
 | `/visage density comfortable\|compact` | Density for footer, session header, and built-in tool chrome (persisted + applied) |
