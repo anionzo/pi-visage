@@ -20,6 +20,11 @@ import {
   transcriptStyleForRole,
   applyTranscriptTheme,
   assertTranscriptTheme,
+  emptyUsageTotals,
+  addUsageToTotals,
+  cacheHitRate,
+  formatUsageSegments,
+  formatFooterTokens,
 } from "../lib/chrome-helpers.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -152,6 +157,46 @@ test("applyTranscriptTheme maps realistic user/assistant message fixtures via sh
   assert.equal(asstTokens.accentToken, "accent");
 });
 
+test("usage totals track cache read/write and Pi cache-hit formula", () => {
+  const totals = emptyUsageTotals();
+  addUsageToTotals(totals, {
+    input: 1000,
+    output: 50,
+    cacheRead: 9000,
+    cacheWrite: 0,
+    cost: { total: 0.01 },
+  });
+  assert.equal(totals.input, 1000);
+  assert.equal(totals.cacheRead, 9000);
+  assert.equal(totals.output, 50);
+
+  // CH = 9000 / (1000+9000+0) = 90%
+  const rate = cacheHitRate({ input: 1000, cacheRead: 9000, cacheWrite: 0 });
+  assert.ok(rate != null);
+  assert.ok(Math.abs(rate - 90) < 0.01);
+
+  totals.latestCacheHitRate = rate;
+  const segs = formatUsageSegments(totals);
+  assert.ok(segs.some((s) => s.startsWith("↑")));
+  assert.ok(segs.some((s) => s.startsWith("↓")));
+  assert.ok(segs.some((s) => s.startsWith("R")), `expected R cache read in ${segs.join(" ")}`);
+  assert.ok(segs.some((s) => s.startsWith("CH")), `expected CH% in ${segs.join(" ")}`);
+  assert.ok(!segs.some((s) => s.startsWith("W")), "zero cacheWrite should be omitted");
+  assert.equal(formatFooterTokens(23000), "23k");
+});
+
+test("formatUsageSegments omits cache fields when zero", () => {
+  const totals = emptyUsageTotals();
+  addUsageToTotals(totals, { input: 100, output: 20, cost: { total: 0.05 } });
+  const segs = formatUsageSegments(totals);
+  assert.deepEqual(
+    segs.filter((s) => s.startsWith("R") || s.startsWith("W") || s.startsWith("CH")),
+    [],
+  );
+  assert.ok(segs.some((s) => s.startsWith("↑")));
+  assert.ok(segs.some((s) => s.startsWith("$")));
+});
+
 test("skin.ts does not register dead customType message renderers for core roles", () => {
   const skin = fs.readFileSync(path.join(ROOT, "extensions", "skin.ts"), "utf8");
   assert.ok(
@@ -169,6 +214,7 @@ test("skin.ts does not register dead customType message renderers for core roles
   assert.ok(skin.includes("setHeader") || skin.includes("applySessionHeader"));
   assert.ok(skin.includes("registerTool"));
   assert.ok(skin.includes("renderCall"));
+  assert.ok(skin.includes("cacheRead") || skin.includes("formatUsageSegments"), "footer must surface prompt cache");
   // Helpers must live outside extensions/ so Pi does not load them as factories
   assert.ok(
     fs.existsSync(path.join(ROOT, "lib", "chrome-helpers.ts")),

@@ -2,7 +2,7 @@
  * Visage chrome — footer, status, session header, compact tools.
  *
  * Footer (Phase 1):
- *   left:  usage OR idle shortcuts when no usage yet
+ *   left:  usage ↑↓ R W CH $ ctx  (matches stock Pi cache fields) OR idle shortcuts
  *   right: provider/model · thinking · branch
  *
  * Session header (Phase 2):
@@ -38,10 +38,15 @@ import * as path from "node:path";
 
 import {
   type Density,
+  type UsageTotals,
+  addUsageToTotals,
   buildHeaderSegments,
+  cacheHitRate,
   countLines,
+  emptyUsageTotals,
   formatToolCallLine,
   formatToolResultLine,
+  formatUsageSegments,
   summarizeToolArgs,
   truncate as truncStr,
 } from "../lib/chrome-helpers.ts";
@@ -72,6 +77,24 @@ const THINKING_LEVELS = new Set([
   "max",
 ]);
 
+/** Common short forms Pi / users may produce → full level name. */
+const THINKING_ALIASES: Record<string, string> = {
+  hi: "high",
+  high: "high",
+  med: "medium",
+  mid: "medium",
+  medium: "medium",
+  min: "minimal",
+  minimal: "minimal",
+  lo: "low",
+  low: "low",
+  xhi: "xhigh",
+  xhigh: "xhigh",
+  max: "max",
+  off: "off",
+  none: "off",
+};
+
 const IDLE_SHORTCUTS_FULL = ["/model", "/visage", "/setStartUI"];
 const IDLE_SHORTCUTS_COMPACT = ["/visage", "/model"];
 
@@ -98,23 +121,36 @@ function saveConfig(config: VisageConfig): void {
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n", "utf8");
 }
 
-function formatTokens(n: number): string {
-  if (!Number.isFinite(n) || n < 0) return "0";
-  if (n < 1000) return `${Math.round(n)}`;
-  if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}k`;
-  return `${(n / 1_000_000).toFixed(2)}m`;
-}
-
-function formatCost(n: number): string {
-  if (!Number.isFinite(n) || n <= 0) return "$0";
-  if (n < 0.01) return `$${n.toFixed(4)}`;
-  return `$${n.toFixed(3)}`;
-}
-
 function formatThinking(level: unknown): string {
   if (typeof level !== "string" || !level) return "off";
-  const normalized = level.toLowerCase();
-  return THINKING_LEVELS.has(normalized) ? normalized : normalized;
+  const normalized = level.toLowerCase().trim();
+  if (THINKING_ALIASES[normalized]) return THINKING_ALIASES[normalized];
+  if (THINKING_LEVELS.has(normalized)) return normalized;
+  return normalized;
+}
+
+/** Theme token for thinking level color, falls back to muted. Level name only (no "think" prefix). */
+function paintThinking(theme: any, level: unknown): string {
+  const name = formatThinking(level);
+  const tokenByLevel: Record<string, string> = {
+    off: "thinkingOff",
+    minimal: "thinkingMinimal",
+    low: "thinkingLow",
+    medium: "thinkingMedium",
+    high: "thinkingHigh",
+    xhigh: "thinkingXhigh",
+    max: "thinkingMax",
+  };
+  const token = tokenByLevel[name];
+  try {
+    if (token && typeof theme.fg === "function") {
+      const painted = theme.fg(token, name);
+      if (typeof painted === "string" && painted.length > 0) return painted;
+    }
+  } catch {
+    // ignore
+  }
+  return theme.fg("muted", name);
 }
 
 function getProviderModel(ctx: any, compact = false): string {
@@ -145,25 +181,41 @@ function shortenCwd(cwd: string, max = 40): string {
   return `…/${parts.slice(-2).join("/")}`;
 }
 
-function getUsageTotals(ctx: any): { input: number; output: number; cost: number } {
-  let input = 0;
-  let output = 0;
-  let cost = 0;
+/**
+ * Cumulative usage for Visage footer — mirrors stock Pi FooterComponent:
+ * assistant + toolResult usage, plus branch_summary/compaction if present.
+ * Tracks cacheRead / cacheWrite and latest turn CH%.
+ */
+function getUsageTotals(ctx: any): UsageTotals {
+  const totals = emptyUsageTotals();
 
   try {
-    for (const e of ctx.sessionManager.getBranch()) {
-      if (e.type === "message" && e.message?.role === "assistant") {
+    // Prefer full session entries (matches Pi); fall back to branch walk.
+    const entries =
+      typeof ctx.sessionManager.getEntries === "function"
+        ? ctx.sessionManager.getEntries()
+        : ctx.sessionManager.getBranch?.() ?? [];
+
+    for (const e of entries) {
+      if (e?.type === "message" && e.message?.role === "assistant") {
         const m = e.message as AssistantMessage;
-        input += m.usage?.input ?? 0;
-        output += m.usage?.output ?? 0;
-        cost += m.usage?.cost?.total ?? 0;
+        addUsageToTotals(totals, m.usage as any);
+        const rate = cacheHitRate(m.usage as any);
+        if (rate != null) totals.latestCacheHitRate = rate;
+      } else if (e?.type === "message" && e.message?.role === "toolResult" && e.message?.usage) {
+        addUsageToTotals(totals, e.message.usage);
+      } else if (
+        (e?.type === "branch_summary" || e?.type === "compaction") &&
+        e.usage
+      ) {
+        addUsageToTotals(totals, e.usage);
       }
     }
   } catch {
     // ignore
   }
 
-  return { input, output, cost };
+  return totals;
 }
 
 function getContextLabel(ctx: any): string | null {
@@ -184,11 +236,13 @@ function joinSegments(parts: string[], sep: string): string {
   return parts.filter(Boolean).join(sep);
 }
 
-function isIdleUsage(input: number, output: number, cost: number): boolean {
+function isIdleUsage(totals: UsageTotals): boolean {
   return (
-    (!Number.isFinite(input) || input <= 0) &&
-    (!Number.isFinite(output) || output <= 0) &&
-    (!Number.isFinite(cost) || cost <= 0)
+    totals.input <= 0 &&
+    totals.output <= 0 &&
+    totals.cacheRead <= 0 &&
+    totals.cacheWrite <= 0 &&
+    totals.cost <= 0
   );
 }
 
@@ -205,29 +259,24 @@ function renderIdleLeft(theme: any, density: Density, width: number): string {
 
 function renderUsageLeft(
   theme: any,
-  input: number,
-  output: number,
-  cost: number,
+  totals: UsageTotals,
   ctxLabel: string | null,
   density: Density,
 ): string {
-  if (density === "compact") {
-    return theme.fg(
-      "dim",
-      joinSegments(
-        [formatCost(cost), `↑${formatTokens(input)}`, `↓${formatTokens(output)}`, ctxLabel ?? ""],
-        " ",
-      ),
-    );
+  // Stock Pi order: ↑ ↓ R W CH $ ctx
+  const parts = formatUsageSegments(totals, { density, includeCost: true });
+  if (ctxLabel) parts.push(ctxLabel);
+
+  // Compact still shows cache when present (it's high-signal); trim only empties
+  if (density === "compact" && parts.length > 6) {
+    // Prefer keeping CH over W when very tight — drop W first
+    const withoutW = parts.filter((p) => !p.startsWith("W"));
+    if (withoutW.length < parts.length && withoutW.length <= 6) {
+      return theme.fg("dim", withoutW.join(" "));
+    }
   }
 
-  return theme.fg(
-    "dim",
-    joinSegments(
-      [`↑${formatTokens(input)}`, `↓${formatTokens(output)}`, formatCost(cost), ctxLabel ?? ""],
-      " ",
-    ),
-  );
+  return theme.fg("dim", parts.join(" "));
 }
 
 function renderRight(
@@ -241,13 +290,14 @@ function renderRight(
 ): string {
   const sep = theme.fg("dim", " · ");
   const budget = Math.max(8, width - leftWidth - 1);
+  const thinkPainted = paintThinking(theme, thinking);
 
   const candidates: string[][] = [];
 
   if (density === "comfortable" && width >= 72) {
     candidates.push([
       theme.fg("accent", model),
-      theme.fg("muted", thinking),
+      thinkPainted,
       branch ? theme.fg("dim", branch) : "",
     ]);
   }
@@ -255,11 +305,13 @@ function renderRight(
   if (width >= 52) {
     candidates.push([
       theme.fg("accent", model),
-      density === "comfortable" ? theme.fg("muted", thinking) : "",
+      density === "comfortable" ? thinkPainted : "",
       branch && density === "comfortable" ? theme.fg("dim", branch) : "",
     ]);
   }
 
+  // Prefer model + level when space is tight
+  candidates.push([theme.fg("accent", model), thinkPainted]);
   candidates.push([theme.fg("accent", model), branch ? theme.fg("dim", branch) : ""]);
   candidates.push([theme.fg("accent", model)]);
 
@@ -291,17 +343,17 @@ function applyFooter(
       dispose: unsub,
       invalidate() {},
       render(width: number): string[] {
-        const { input, output, cost } = getUsageTotals(ctx);
+        const totals = getUsageTotals(ctx);
         const ctxLabel = getContextLabel(ctx);
         const thinking = formatThinking(pi.getThinkingLevel?.() ?? "off");
         const compactModel = density === "compact" || width < 64;
         const model = getProviderModel(ctx, compactModel);
         const branch = footerData.getGitBranch?.() || "";
-        const idle = isIdleUsage(input, output, cost);
+        const idle = isIdleUsage(totals);
 
         const left = idle
           ? renderIdleLeft(theme, density, width)
-          : renderUsageLeft(theme, input, output, cost, ctxLabel, density);
+          : renderUsageLeft(theme, totals, ctxLabel, density);
 
         const rightCore = renderRight(
           theme,
@@ -334,12 +386,32 @@ function applySessionHeader(pi: ExtensionAPI, ctx: any, density: Density): void 
         const model = getProviderModel(ctx, density === "compact");
         const thinking = formatThinking(pi.getThinkingLevel?.() ?? "off");
         const cwd = shortenCwd(ctx.cwd ?? process.cwd());
+        // comfortable segments already say "thinking <level>"; compact is bare level
         const segs = buildHeaderSegments({ model, thinking, cwd }, density);
 
-        // Colorize: model accent, thinking muted, cwd dim
+        // Colorize: model accent, thinking themed, cwd dim
         const painted = segs.map((seg, i) => {
           if (i === 0) return theme.fg("accent", seg);
-          if (i === 1) return theme.fg("muted", seg);
+          if (i === 1) {
+            // compact: just the level name; comfortable segment is "thinking <level>" from helper
+            if (density === "compact") return paintThinking(theme, thinking);
+            const tokenByLevel: Record<string, string> = {
+              off: "thinkingOff",
+              minimal: "thinkingMinimal",
+              low: "thinkingLow",
+              medium: "thinkingMedium",
+              high: "thinkingHigh",
+              xhigh: "thinkingXhigh",
+              max: "thinkingMax",
+            };
+            try {
+              const token = tokenByLevel[thinking];
+              if (token) return theme.fg(token, seg);
+            } catch {
+              // fall through
+            }
+            return theme.fg("muted", seg);
+          }
           return theme.fg("dim", seg);
         });
         const sep = theme.fg("dim", " · ");
@@ -360,12 +432,14 @@ function setIdleStatus(ctx: any, enabled: boolean, density: Density): void {
     ctx.ui.setStatus(STATUS_KEY, undefined);
     return;
   }
+  // Short idle mark — avoid competing with workingIndicator text
   const mark = density === "compact" ? "v" : "·";
   ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("dim", mark));
 }
 
 function setWorkingStatus(ctx: any, enabled: boolean): void {
   if (!enabled || ctx.mode !== "tui" || !ctx.hasUI) return;
+  // Dot only; animated cat face is the page workingIndicator next to "Working..."
   ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("accent", "●"));
 }
 

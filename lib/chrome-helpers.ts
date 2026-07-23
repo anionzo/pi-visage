@@ -282,3 +282,103 @@ export function countLines(text: string | undefined | null): number {
   if (!text) return 0;
   return text.split("\n").length;
 }
+
+/** Session usage rollup — matches Pi footer fields (↑ ↓ R W CH $). */
+export type UsageTotals = {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  cost: number;
+  /** Latest assistant turn cache hit rate 0–100, or null if unknown. */
+  latestCacheHitRate: number | null;
+};
+
+export type UsageLike = {
+  input?: number;
+  output?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+  cost?: { total?: number };
+};
+
+export function emptyUsageTotals(): UsageTotals {
+  return {
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    cost: 0,
+    latestCacheHitRate: null,
+  };
+}
+
+/** Add one usage blob into totals (assistant / toolResult / compaction). */
+export function addUsageToTotals(totals: UsageTotals, usage: UsageLike | null | undefined): void {
+  if (!usage) return;
+  totals.input += usage.input ?? 0;
+  totals.output += usage.output ?? 0;
+  totals.cacheRead += usage.cacheRead ?? 0;
+  totals.cacheWrite += usage.cacheWrite ?? 0;
+  totals.cost += usage.cost?.total ?? 0;
+}
+
+/**
+ * Cache hit rate for one assistant turn (Pi formula):
+ * cacheRead / (input + cacheRead + cacheWrite) * 100
+ */
+export function cacheHitRate(usage: UsageLike | null | undefined): number | null {
+  if (!usage) return null;
+  const input = usage.input ?? 0;
+  const cacheRead = usage.cacheRead ?? 0;
+  const cacheWrite = usage.cacheWrite ?? 0;
+  const prompt = input + cacheRead + cacheWrite;
+  if (prompt <= 0) return null;
+  return (cacheRead / prompt) * 100;
+}
+
+/** Compact token count for footer (same breakpoints as Pi). */
+export function formatFooterTokens(count: number): string {
+  if (!Number.isFinite(count) || count < 0) return "0";
+  if (count < 1000) return String(Math.round(count));
+  if (count < 10_000) return `${(count / 1000).toFixed(1)}k`;
+  if (count < 1_000_000) return `${Math.round(count / 1000)}k`;
+  if (count < 10_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
+  return `${Math.round(count / 1_000_000)}M`;
+}
+
+/**
+ * Build left-side usage segments like stock Pi footer:
+ * ↑in ↓out Rread Wwrite CHrate% $cost
+ * Cache fields only appear when non-zero (same as Pi).
+ */
+export function formatUsageSegments(
+  totals: UsageTotals,
+  options: { density?: Density; includeCost?: boolean } = {},
+): string[] {
+  const density = options.density ?? "comfortable";
+  const includeCost = options.includeCost !== false;
+  const parts: string[] = [];
+
+  if (totals.input > 0) parts.push(`↑${formatFooterTokens(totals.input)}`);
+  if (totals.output > 0) parts.push(`↓${formatFooterTokens(totals.output)}`);
+  if (totals.cacheRead > 0) parts.push(`R${formatFooterTokens(totals.cacheRead)}`);
+  if (totals.cacheWrite > 0) parts.push(`W${formatFooterTokens(totals.cacheWrite)}`);
+  if (
+    (totals.cacheRead > 0 || totals.cacheWrite > 0) &&
+    totals.latestCacheHitRate != null &&
+    Number.isFinite(totals.latestCacheHitRate)
+  ) {
+    parts.push(`CH${totals.latestCacheHitRate.toFixed(1)}%`);
+  }
+
+  if (includeCost && totals.cost > 0) {
+    const n = totals.cost;
+    const costStr = n < 0.01 ? `$${n.toFixed(4)}` : `$${n.toFixed(3)}`;
+    parts.push(costStr);
+  }
+
+  // Compact: prefer dropping write before read if caller wants to trim further
+  void density;
+  return parts;
+}
