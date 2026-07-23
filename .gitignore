@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+.env
+.env.*
+_ref/
+_ref_*.json
+.pi/
+*.tsbuildinfo
+.idea/
+.vscode/
+
+# local Pi session exports
+pi-session-*.html
+

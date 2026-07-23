@@ -1,0 +1,50 @@
+{
+  "name": "pi-visage",
+  "version": "0.1.0",
+  "description": "Full UI skin for Pi: Visage startup page, chrome (header/footer/status), working indicator, and matching dark/light themes.",
+  "type": "module",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "startup-ui",
+    "theme",
+    "extension",
+    "tui",
+    "visage",
+    "skin"
+  ],
+  "license": "MIT",
+  "author": "anionzo",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anionzo/pi-visage.git"
+  },
+  "bugs": {
+    "url": "https://github.com/anionzo/pi-visage/issues"
+  },
+  "homepage": "https://github.com/anionzo/pi-visage#readme",
+  "files": [
+    "extensions",
+    "lib",
+    "pages",
+    "themes",
+    "README.md",
+    "LICENSE"
+  ],
+  "pi": {
+    "extensions": [
+      "./extensions"
+    ],
+    "themes": [
+      "./themes"
+    ]
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test test/chrome-helpers.test.mjs"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  }
+}

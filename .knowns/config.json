@@ -1,0 +1,49 @@
+{
+  "name": "pi-visage",
+  "id": "pi-visage",
+  "createdAt": "2026-07-22T18:00:49.979Z",
+  "settings": {
+    "defaultPriority": "medium",
+    "gitTrackingMode": "git-tracked",
+    "statuses": [
+      "todo",
+      "in-progress",
+      "in-review",
+      "done",
+      "blocked",
+      "on-hold",
+      "urgent"
+    ],
+    "statusColors": {
+      "blocked": "red",
+      "done": "green",
+      "in-progress": "blue",
+      "in-review": "purple",
+      "on-hold": "yellow",
+      "todo": "gray",
+      "urgent": "orange"
+    },
+    "visibleColumns": [
+      "todo",
+      "in-progress",
+      "blocked",
+      "done",
+      "in-review"
+    ],
+    "semanticSearch": {
+      "enabled": true,
+      "model": "all-MiniLM-L6-v2",
+      "huggingFaceId": "Xenova/all-MiniLM-L6-v2",
+      "dimensions": 384,
+      "maxTokens": 256
+    },
+    "platforms": [
+      "claude-code",
+      "opencode",
+      "codex",
+      "agents",
+      "pi"
+    ],
+    "enableChatUI": true
+  }
+}
