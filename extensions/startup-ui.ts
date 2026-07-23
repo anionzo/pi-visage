@@ -900,6 +900,11 @@ function getActiveUi():
 function loadState(): void {
   try {
     if (!fs.existsSync(CONFIG_PATH)) {
+      // First run: persist package defaults so splash is on without /setStartUI.
+      STATE.enabled = true;
+      STATE.selectedId = "visage";
+      STATE.layout = "auto";
+      saveState();
       return;
     }
 
@@ -1662,12 +1667,12 @@ export default function startupUiAdapter(
     },
   );
 
-  /** Canonical command name. */
+  /** Canonical command name. Prefer /setStartUI visage (no dialog). */
   pi.registerCommand(
     "setStartUI",
     {
       description:
-        "Select startup UI /setStartUI",
+        "Startup UI: /setStartUI visage|visage-minimal|off|reload|status (omit arg = picker)",
 
       getArgumentCompletions:
         getCommandCompletions,

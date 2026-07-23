@@ -50,7 +50,9 @@ Then pick the theme in `/settings` → `visage-dark`, `visage-light`, or `visage
 
 | Command | Action |
 | --- | --- |
-| `/setStartUI` | Choose startup page (`visage`, `visage-minimal`, …) |
+| `/visage setup` | **Apply recommended defaults** (startup `visage`, theme dark, footer/status on) — no picker |
+| `/setStartUI visage` | Set startup page without dialog (`visage`, `visage-minimal`, `off`, `reload`, `status`) |
+| `/visage page …` | Same page ids as `/setStartUI`, writes `visage-ui.json` |
 | `/visage show` | Show saved chrome config |
 | `/visage doctor` | Report theme, page id, density, and `visage.json` / `visage-ui.json` paths (safe in non-TUI) |
 | `/visage footer on\|off` | Toggle custom footer (shows ↑↓ **R**/**W**/**CH** cache when provider reports it) |

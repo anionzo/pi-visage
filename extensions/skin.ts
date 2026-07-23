@@ -203,6 +203,78 @@ function saveConfig(config: VisageConfig): void {
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n", "utf8");
 }
 
+/** Recommended startup-page defaults written to visage-ui.json (no picker). */
+const DEFAULT_UI_STATE = {
+  selectedId: "visage",
+  enabled: true,
+  layout: "auto" as const,
+};
+
+function saveUiAdapterState(state: {
+  selectedId: string;
+  enabled: boolean;
+  layout: "auto" | "full" | "compact";
+}): void {
+  fs.mkdirSync(path.dirname(UI_CONFIG_PATH), { recursive: true });
+  fs.writeFileSync(UI_CONFIG_PATH, JSON.stringify(state, null, 2) + "\n", "utf8");
+}
+
+/**
+ * One-shot recommended setup — no interactive /setStartUI picker.
+ * Writes chrome + startup defaults and applies what the current session can.
+ */
+function applyRecommendedSetup(
+  pi: ExtensionAPI,
+  ctx: any,
+  config: VisageConfig,
+): { config: VisageConfig; lines: string[] } {
+  const next: VisageConfig = {
+    footer: true,
+    status: true,
+    density: "comfortable",
+    widget: false,
+  };
+  saveConfig(next);
+  saveUiAdapterState({ ...DEFAULT_UI_STATE });
+
+  const themeName = "visage-dark";
+  let themeNote = `theme → ${themeName}`;
+  if (ctx?.mode === "tui" && ctx?.hasUI && typeof ctx.ui?.setTheme === "function") {
+    try {
+      const result = ctx.ui.setTheme(themeName);
+      if (result && !result.success) {
+        themeNote = `theme → ${themeName} (failed: ${result.error ?? "unknown"})`;
+      } else {
+        themeNote = `theme → ${themeName} (applied)`;
+      }
+    } catch (err) {
+      themeNote = `theme → ${themeName} (error: ${err instanceof Error ? err.message : String(err)})`;
+    }
+  } else {
+    themeNote = `theme → ${themeName} (saved in settings separately; non-TUI skip apply)`;
+  }
+
+  if (ctx?.mode === "tui") {
+    applyFooter(pi, ctx, next.footer, next.density);
+    setIdleStatus(ctx, next.status, next.density);
+    applyContextWidget(pi, ctx, next.widget, next.density);
+  }
+
+  void config;
+  return {
+    config: next,
+    lines: [
+      "pi-visage setup — defaults applied (no picker)",
+      "  startup page: visage (enabled, layout auto)",
+      `  ${themeNote}`,
+      "  footer: on · status: on · widget: off · density: comfortable",
+      `  chrome: ${CONFIG_PATH}`,
+      `  ui:     ${UI_CONFIG_PATH}`,
+      "  tip: restart Pi or /setStartUI visage to refresh splash if needed",
+    ],
+  };
+}
+
 function formatThinking(level: unknown): string {
   if (typeof level !== "string" || !level) return "off";
   const normalized = level.toLowerCase().trim();
@@ -847,10 +919,17 @@ export default function visageSkin(pi: ExtensionAPI) {
 
   pi.registerCommand("visage", {
     description:
-      "Visage UI: show | doctor | footer | status | density | theme dark|light|rose | header | widget",
+      "Visage UI: setup | show | doctor | footer | status | density | theme | header | widget",
     handler: async (args, ctx) => {
       const parts = args.trim().split(/\s+/).filter(Boolean);
       const [cmd, value] = parts;
+
+      if (cmd === "setup" || cmd === "init" || cmd === "defaults") {
+        const result = applyRecommendedSetup(pi, ctx, config);
+        config = result.config;
+        reportLines(ctx, result.lines);
+        return;
+      }
 
       if (!cmd || cmd === "show") {
         reportLines(ctx, [
@@ -872,6 +951,34 @@ export default function visageSkin(pi: ExtensionAPI) {
       if (cmd === "doctor") {
         // Safe in TUI and non-TUI — never throws on missing notify/theme.
         reportLines(ctx, formatDoctorReport(buildDoctorSnapshot(ctx, config)));
+        return;
+      }
+
+      // Non-interactive startup page pick (same as /setStartUI <id>, no dialog).
+      if (cmd === "page") {
+        const pageId = (value || "visage").toLowerCase();
+        if (pageId !== "off" && pageId !== "visage" && pageId !== "visage-minimal") {
+          reportLines(
+            ctx,
+            [
+              `Unknown page: ${pageId}`,
+              "Usage: /visage page visage|visage-minimal|off",
+              "(or /setStartUI <id> — same files)",
+            ],
+            "warning",
+          );
+          return;
+        }
+        if (pageId === "off") {
+          saveUiAdapterState({ selectedId: "visage", enabled: false, layout: "auto" });
+          reportLines(ctx, ["Startup page disabled (Pi default). Restart or /setStartUI off applied on next paint."]);
+          return;
+        }
+        saveUiAdapterState({ selectedId: pageId, enabled: true, layout: "auto" });
+        reportLines(ctx, [
+          `Startup page → ${pageId} (saved)`,
+          "Apply now: /setStartUI " + pageId,
+        ]);
         return;
       }
 
@@ -980,8 +1087,9 @@ export default function visageSkin(pi: ExtensionAPI) {
         ctx,
         [
           "Usage:",
-          "  /visage show",
-          "  /visage doctor",
+          "  /visage setup              — apply defaults (no picker)",
+          "  /visage show | doctor",
+          "  /visage page visage|visage-minimal|off",
           "  /visage footer on|off",
           "  /visage status on|off",
           "  /visage header on|off",
