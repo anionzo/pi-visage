@@ -1,15 +1,15 @@
 # pi-visage
 
-Full UI skin for [Pi](https://pi.dev): cat-faced startup page, session chrome, ear-wave working indicator, and matching themes.
+Full UI skin for [Pi](https://pi.dev): slime-mascot startup page, session chrome, bounce working indicator, and matching themes.
 
-A Pi package that reskins the TUI: startup page adapter, session chrome, and matching themes. The splash mascot is a cream ASCII cat; while the agent works, the indicator cycles ear-wave frames.
+A Pi package that reskins the TUI: startup page adapter, session chrome, and matching themes. The splash mascot is a block-pixel slime (teal/violet gradient); while the agent works, the indicator cycles short face frames (`[▀▀]` / `[▄▄]` / …).
 
 ## What's inside
 
 | Piece | Type | Path |
 | --- | --- | --- |
 | Startup adapter | extension | `extensions/startup-ui.ts` |
-| Visage splash page | page | `pages/visage.ts` |
+| Visage splash (slime) | page | `pages/visage.ts` |
 | Session chrome | extension | `extensions/skin.ts` |
 | Dark theme | theme | `themes/visage-dark.json` |
 | Light theme | theme | `themes/visage-light.json` |
@@ -19,9 +19,9 @@ A Pi package that reskins the TUI: startup page adapter, session chrome, and mat
 ### Local (dev)
 
 ```bash
-pi install D:/CODE/PI
+pi install E:/CODE/pi-visage
 # or one-shot without writing settings:
-pi -e D:/CODE/PI
+pi -e E:/CODE/pi-visage
 ```
 
 ### Git

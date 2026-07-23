@@ -11,10 +11,10 @@ Canonical repository guidance for agents working in **pi-visage**.
 ## TL;DR
 
 - This repo is a **Pi package** that reskins Pi's TUI (startup page + chrome + themes).
-- Install target path in this workspace: `D:/CODE/PI` → GitHub `anionzo/pi-visage`.
+- Install target path in this workspace: `E:/CODE/pi-visage` → GitHub `anionzo/pi-visage`.
 - Read `README.md` for install/commands; use `.knowns/` for tasks/memory/docs.
 - Do not manually edit Knowns-managed task/doc markdown.
-- Prefer search-first; validate UI changes with `pi -e D:/CODE/PI`.
+- Prefer search-first; validate UI changes with `pi -e E:/CODE/pi-visage`.
 - Do not commit unless the user asks.
 
 ## Repo Mental Model
@@ -43,7 +43,7 @@ Canonical repository guidance for agents working in **pi-visage**.
 ## Development Workflow
 
 1. Edit theme / page / extension.
-2. Smoke test: `pi -e D:/CODE/PI` (or reinstall with `pi install D:/CODE/PI`).
+2. Smoke test: `pi -e E:/CODE/pi-visage` (or reinstall with `pi install E:/CODE/pi-visage`).
 3. Exercise: splash render, `/setStartUI`, `/visage show`, theme switch, turn status.
 4. Capture durable decisions in Knowns memory/docs when they should survive sessions.
 
@@ -74,5 +74,5 @@ Priority order when extending:
 ## References
 
 - Pi docs (local install): themes, tui, extensions, packages
-- Repo: https://github.com/anionzo/pi-visage
+- Repo: <https://github.com/anionzo/pi-visage>
 - Pi package layout: `extensions/` + `pages/` + `themes/` via `package.json` `pi` manifest
