@@ -3,7 +3,7 @@
  *
  * Footer (Phase 1):
  *   left:  usage ↑↓ R W CH $ ctx  (matches stock Pi cache fields) OR idle shortcuts
- *   right: provider/model · thinking · branch
+ *   right: provider/model · thinking · branch · project path (cached git root)
  *
  * Session header (Phase 2):
  *   after first turn — thin bar: model · thinking · cwd
@@ -541,6 +541,22 @@ function renderRight(
 	return truncateToWidth(theme.fg("accent", model), budget);
 }
 
+let cachedProjectDir: string | null | undefined = undefined;
+
+async function resolveProjectDir(pi: ExtensionAPI): Promise<void> {
+	if (cachedProjectDir !== undefined) return;
+	try {
+		const result = await pi.exec("git", ["rev-parse", "--show-toplevel"], { timeout: 3000 });
+		if (result.code === 0 && result.stdout?.trim()) {
+			cachedProjectDir = result.stdout.trim();
+			return;
+		}
+	} catch {
+		// not a git repo or git not available
+	}
+	cachedProjectDir = null;
+}
+
 function applyFooter(
 	pi: ExtensionAPI,
 	ctx: any,
@@ -553,6 +569,8 @@ function applyFooter(
 		ctx.ui.setFooter(undefined);
 		return;
 	}
+
+	void resolveProjectDir(pi);
 
 	ctx.ui.setFooter((tui: any, theme: any, footerData: any) => {
 		const unsub = footerData.onBranchChange?.(() => tui.requestRender());
@@ -573,12 +591,14 @@ function applyFooter(
 					? renderIdleLeft(theme, density, width)
 					: renderUsageLeft(theme, totals, ctxLabel, density);
 
+				const cwdForPath = cachedProjectDir ?? (ctx.cwd ?? process.cwd());
+
 				const rightCore = renderRight(
 					theme,
 					model,
 					thinking,
 					branch,
-					ctx.cwd ?? process.cwd(),
+					cwdForPath,
 					density,
 					width,
 					visibleWidth(left),
