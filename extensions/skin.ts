@@ -490,6 +490,7 @@ function renderRight(
 	model: string,
 	thinking: string,
 	branch: string,
+	cwd: string,
 	density: Density,
 	width: number,
 	leftWidth: number,
@@ -499,12 +500,14 @@ function renderRight(
 	const thinkPainted = paintThinking(theme, thinking);
 
 	const candidates: string[][] = [];
+	const cwdLabel = cwd ? theme.fg("dim", shortenCwd(cwd)) : "";
 
 	if (density === "comfortable" && width >= 72) {
 		candidates.push([
 			theme.fg("accent", model),
 			thinkPainted,
 			branch ? theme.fg("dim", branch) : "",
+			cwdLabel,
 		]);
 	}
 
@@ -513,6 +516,7 @@ function renderRight(
 			theme.fg("accent", model),
 			density === "comfortable" ? thinkPainted : "",
 			branch && density === "comfortable" ? theme.fg("dim", branch) : "",
+			cwdLabel,
 		]);
 	}
 
@@ -521,6 +525,11 @@ function renderRight(
 	candidates.push([
 		theme.fg("accent", model),
 		branch ? theme.fg("dim", branch) : "",
+		cwdLabel,
+	]);
+	candidates.push([
+		theme.fg("accent", model),
+		cwdLabel,
 	]);
 	candidates.push([theme.fg("accent", model)]);
 
@@ -569,6 +578,7 @@ function applyFooter(
 					model,
 					thinking,
 					branch,
+					ctx.cwd ?? process.cwd(),
 					density,
 					width,
 					visibleWidth(left),
