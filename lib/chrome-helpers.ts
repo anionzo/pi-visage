@@ -369,6 +369,44 @@ export function formatFooterTokens(count: number): string {
 	return `${Math.round(count / 1_000_000)}M`;
 }
 
+/** Canonical thinking levels from Pi. */
+export const THINKING_LEVELS = new Set([
+	"off",
+	"minimal",
+	"low",
+	"medium",
+	"high",
+	"xhigh",
+	"max",
+]);
+
+/** Common short forms Pi / users may produce → full level name. */
+export const THINKING_ALIASES: Record<string, string> = {
+	hi: "high",
+	high: "high",
+	med: "medium",
+	mid: "medium",
+	medium: "medium",
+	min: "minimal",
+	minimal: "minimal",
+	lo: "low",
+	low: "low",
+	xhi: "xhigh",
+	xhigh: "xhigh",
+	max: "max",
+	off: "off",
+	none: "off",
+};
+
+/** Normalize thinking level for chrome + info panel. */
+export function formatThinkingLevel(level: unknown): string {
+	if (typeof level !== "string" || !level) return "off";
+	const normalized = level.toLowerCase().trim();
+	if (THINKING_ALIASES[normalized]) return THINKING_ALIASES[normalized];
+	if (THINKING_LEVELS.has(normalized)) return normalized;
+	return normalized;
+}
+
 /**
  * Build left-side usage segments like stock Pi footer:
  * ↑in ↓out Rread Wwrite CHrate% $cost
@@ -425,12 +463,20 @@ export type DoctorSnapshot = {
 	footer: boolean;
 	status: boolean;
 	widget: boolean;
+	/** When panels master is on, thin above-editor widget is suppressed. */
+	widgetSuppressedByPanels?: boolean;
+	panelsEnabled?: boolean | null;
+	panelsGit?: boolean | null;
+	panelsInfo?: boolean | null;
+	panelsSession?: boolean | null;
+	panelsSystem?: boolean | null;
 };
 
 /** Pure multi-line doctor report — safe for TUI notify or stdout. */
 export function formatDoctorReport(s: DoctorSnapshot): string[] {
-	const yn = (v: boolean | null) => (v === null ? "unknown" : v ? "yes" : "no");
-	return [
+	const yn = (v: boolean | null | undefined) =>
+		v === null || v === undefined ? "unknown" : v ? "yes" : "no";
+	const lines = [
 		"pi-visage doctor",
 		`  mode:       ${s.mode || "unknown"}`,
 		`  theme:      ${s.themeName ?? "unknown"}`,
@@ -440,10 +486,12 @@ export function formatDoctorReport(s: DoctorSnapshot): string[] {
 		`  density:    ${s.density}`,
 		`  footer:     ${s.footer ? "on" : "off"}`,
 		`  status:     ${s.status ? "on" : "off"}`,
-		`  widget:     ${s.widget ? "on" : "off"}`,
+		`  widget:     ${s.widget ? "on" : "off"}${s.widgetSuppressedByPanels ? " (suppressed by panels)" : ""}`,
+		`  panels:     ${yn(s.panelsEnabled)} (git=${yn(s.panelsGit)} info=${yn(s.panelsInfo)} session=${yn(s.panelsSession)} system=${yn(s.panelsSystem)})`,
 		`  visage.json:${s.chromeExists ? "" : " (missing)"} ${s.chromePath}`,
 		`  visage-ui:  ${s.uiExists ? "" : "(missing) "}${s.uiPath}`,
 	];
+	return lines;
 }
 
 /** Map /visage theme args → shipped theme id. */

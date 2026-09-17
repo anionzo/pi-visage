@@ -24,7 +24,9 @@ Canonical repository guidance for agents working in **pi-visage**.
 | `extensions/startup-ui.ts` | Discovers `pages/*`, persists selection in `~/.pi/agent/visage-ui.json`, sets header + working indicator |
 | `pages/*.ts` | Pure page definitions (`export default { id, render*, workingIndicator, onActivate... }`), **no imports** |
 | `extensions/skin.ts` | Footer/status/`/visage` commands; config in `~/.pi/agent/visage.json` |
-| `themes/*.json` | Full Pi theme tokens (51+ colors) |
+| `extensions/panels.ts` | Status panels factory (git/info/session/system) via `setWidget` belowEditor; `/sp`, Ctrl+Shift+P |
+| `lib/panels/*` | Pure panel builders + panels config helpers (never under `extensions/`) |
+| `themes/*.json` | Full Pi theme tokens (51+ colors) — Visage brand only (no third-party theme dump) |
 | `.knowns/` | Knowns project store (config, tasks, memory, docs) |
 | Runtime config (user home) | Preference persistence outside the git repo |
 
@@ -37,8 +39,9 @@ Canonical repository guidance for agents working in **pi-visage**.
 5. **One startup adapter** — do not load a second package that also registers a full startup-ui adapter.
 6. **Config split**:
    - Startup selection/layout → `visage-ui.json`
-   - Chrome prefs → `visage.json`
+   - Chrome prefs + `panels` key → `visage.json` (skin and panels both read-merge-write; never wipe sibling keys)
    - Project agent knowledge → `.knowns/`
+7. **Panels vs thin widget**: when `panels.enabled`, above-editor context strip is suppressed (Info panel covers it).
 
 ## Development Workflow
 
@@ -60,10 +63,11 @@ Canonical repository guidance for agents working in **pi-visage**.
 
 Priority order when extending:
 
-1. Tool compact renderers (`density: compact`) via `registerTool` overrides
-2. Message/entry custom cards
+1. Tool compact renderers (`density: compact`) via `registerTool` overrides — **done** (skin)
+2. Message/entry custom cards (theme tokens only for core roles)
 3. Extra pages/presets under `pages/` + `themes/`
-4. Widget placement (plan/todo/context)
+4. Status panels below editor — **done** (integrated from pi-status-panels)
+5. Density-aware panel layout / plan-todo widgets
 
 ## Git Safety
 

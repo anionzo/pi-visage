@@ -291,6 +291,12 @@ test("formatDoctorReport lists theme, page id, and both config paths", () => {
 		footer: true,
 		status: false,
 		widget: true,
+		widgetSuppressedByPanels: true,
+		panelsEnabled: true,
+		panelsGit: true,
+		panelsInfo: true,
+		panelsSession: false,
+		panelsSystem: true,
 	});
 	const blob = lines.join("\n");
 	assert.ok(blob.includes("pi-visage doctor"));
@@ -300,6 +306,8 @@ test("formatDoctorReport lists theme, page id, and both config paths", () => {
 	assert.ok(blob.includes("/tmp/visage-ui.json"));
 	assert.ok(blob.includes("(missing)"));
 	assert.ok(blob.includes("rpc"));
+	assert.ok(blob.includes("panels:"));
+	assert.ok(blob.includes("suppressed by panels"));
 });
 
 test("pages stay sandboxed: no top-level import; unique ids", () => {
@@ -325,7 +333,10 @@ test("pages stay sandboxed: no top-level import; unique ids", () => {
 test("extensions/ only contains factory entrypoints", () => {
 	const extDir = path.join(ROOT, "extensions");
 	const files = fs.readdirSync(extDir).filter((f) => f.endsWith(".ts"));
-	assert.deepEqual(files.sort(), ["skin.ts", "startup-ui.ts"].sort());
+	assert.deepEqual(
+		files.sort(),
+		["panels.ts", "skin.ts", "startup-ui.ts"].sort(),
+	);
 	for (const file of files) {
 		const src = fs.readFileSync(path.join(extDir, file), "utf8");
 		assert.ok(

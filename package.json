@@ -1,7 +1,7 @@
 {
   "name": "pi-visage",
   "version": "0.1.0",
-  "description": "Full UI skin for Pi: Visage slime splash, chrome, working indicator, dark/light/rose themes, doctor + setup.",
+  "description": "Full UI skin for Pi: Visage slime splash, chrome, status panels (git/info/session/system), dark/light/rose themes, doctor + setup.",
   "type": "module",
   "keywords": [
     "pi-package",
@@ -11,7 +11,10 @@
     "extension",
     "tui",
     "visage",
-    "skin"
+    "skin",
+    "status-panels",
+    "widget",
+    "git"
   ],
   "license": "MIT",
   "author": "anionzo",
@@ -40,7 +43,7 @@
     ]
   },
   "scripts": {
-    "test": "node --experimental-strip-types --test test/chrome-helpers.test.mjs",
+    "test": "node --experimental-strip-types --test test/chrome-helpers.test.mjs test/panels.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "peerDependencies": {

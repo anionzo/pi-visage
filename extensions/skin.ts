@@ -46,6 +46,7 @@ import {
 	countLines,
 	emptyUsageTotals,
 	formatDoctorReport,
+	formatThinkingLevel,
 	formatToolCallLine,
 	formatToolResultLine,
 	formatUsageSegments,
@@ -53,6 +54,13 @@ import {
 	summarizeToolArgs,
 	truncate as truncStr,
 } from "../lib/chrome-helpers.ts";
+import {
+	createDefaultPanelsConfig,
+	createPanelState,
+	isPanelsMasterEnabled,
+	loadPanelsConfig,
+	savePanelsConfig,
+} from "../lib/panels/config.ts";
 
 const STATUS_KEY = "pi-visage";
 const WIDGET_KEY = "pi-visage-ctx";
@@ -79,37 +87,8 @@ const DEFAULT_CONFIG: VisageConfig = {
 	widget: false,
 };
 
-/** Canonical thinking levels from Pi. */
-const THINKING_LEVELS = new Set([
-	"off",
-	"minimal",
-	"low",
-	"medium",
-	"high",
-	"xhigh",
-	"max",
-]);
-
-/** Common short forms Pi / users may produce → full level name. */
-const THINKING_ALIASES: Record<string, string> = {
-	hi: "high",
-	high: "high",
-	med: "medium",
-	mid: "medium",
-	medium: "medium",
-	min: "minimal",
-	minimal: "minimal",
-	lo: "low",
-	low: "low",
-	xhi: "xhigh",
-	xhigh: "xhigh",
-	max: "max",
-	off: "off",
-	none: "off",
-};
-
-const IDLE_SHORTCUTS_FULL = ["/model", "/visage", "/setStartUI"];
-const IDLE_SHORTCUTS_COMPACT = ["/visage", "/model"];
+const IDLE_SHORTCUTS_FULL = ["/model", "/visage", "/setStartUI", "/sp"];
+const IDLE_SHORTCUTS_COMPACT = ["/visage", "/sp"];
 
 const BUILTIN_TOOLS = [
 	"read",
@@ -204,6 +183,7 @@ function reportLines(
 
 function buildDoctorSnapshot(ctx: any, config: VisageConfig): DoctorSnapshot {
 	const uiState = loadUiAdapterState();
+	const panels = loadPanelsConfig();
 	return {
 		mode: typeof ctx?.mode === "string" ? ctx.mode : "unknown",
 		themeName: readThemeName(ctx),
@@ -218,12 +198,42 @@ function buildDoctorSnapshot(ctx: any, config: VisageConfig): DoctorSnapshot {
 		footer: config.footer,
 		status: config.status,
 		widget: config.widget,
+		widgetSuppressedByPanels: panels.enabled && config.widget,
+		panelsEnabled: panels.enabled,
+		panelsGit: panels.panels.git,
+		panelsInfo: panels.panels.info,
+		panelsSession: panels.panels.session,
+		panelsSystem: panels.panels.system,
 	};
 }
 
+/** Write chrome fields only — preserve `panels` and any unknown keys. */
 function saveConfig(config: VisageConfig): void {
-	fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
-	fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n", "utf8");
+	try {
+		fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
+		let root: Record<string, unknown> = {};
+		if (fs.existsSync(CONFIG_PATH)) {
+			try {
+				const raw = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+				if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+					root = raw as Record<string, unknown>;
+				}
+			} catch {
+				// replace corrupt file
+			}
+		}
+		root.footer = config.footer;
+		root.status = config.status;
+		root.density = config.density;
+		root.widget = config.widget;
+		fs.writeFileSync(
+			CONFIG_PATH,
+			JSON.stringify(root, null, 2) + "\n",
+			"utf8",
+		);
+	} catch (err) {
+		console.error(`Failed to save Visage chrome config:`, err);
+	}
 }
 
 /** Recommended startup-page defaults written to visage-ui.json (no picker). */
@@ -264,6 +274,12 @@ function applyRecommendedSetup(
 	saveConfig(next);
 	saveUiAdapterState({ ...DEFAULT_UI_STATE });
 
+	// Enable all status panels (below editor); thin above-editor strip stays off.
+	const panels = createDefaultPanelsConfig();
+	panels.enabled = true;
+	panels.panels = createPanelState(true);
+	savePanelsConfig(panels);
+
 	const themeName = "visage-dark";
 	let themeNote = `theme → ${themeName}`;
 	if (
@@ -299,6 +315,7 @@ function applyRecommendedSetup(
 			"  startup page: visage (enabled, layout auto)",
 			`  ${themeNote}`,
 			"  footer: on · status: on · widget: off · density: comfortable",
+			"  panels: on (git · info · session · system) — /sp to configure",
 			`  chrome: ${CONFIG_PATH}`,
 			`  ui:     ${UI_CONFIG_PATH}`,
 			"  tip: restart Pi or /setStartUI visage to refresh splash if needed",
@@ -306,13 +323,7 @@ function applyRecommendedSetup(
 	};
 }
 
-function formatThinking(level: unknown): string {
-	if (typeof level !== "string" || !level) return "off";
-	const normalized = level.toLowerCase().trim();
-	if (THINKING_ALIASES[normalized]) return THINKING_ALIASES[normalized];
-	if (THINKING_LEVELS.has(normalized)) return normalized;
-	return normalized;
-}
+const formatThinking = formatThinkingLevel;
 
 /** Theme token for thinking level color, falls back to muted. Level name only (no "think" prefix). */
 function paintThinking(theme: any, level: unknown): string {
@@ -651,6 +662,7 @@ function setWorkingStatus(ctx: any, enabled: boolean): void {
 /**
  * Optional context strip above the editor (Pi setWidget API).
  * Off by default — enable with /visage widget on.
+ * Suppressed when status panels master toggle is on (Info panel covers context).
  */
 function applyContextWidget(
 	pi: ExtensionAPI,
@@ -661,7 +673,9 @@ function applyContextWidget(
 	if (ctx?.mode !== "tui" || !ctx?.hasUI) return;
 	if (typeof ctx.ui?.setWidget !== "function") return;
 
-	if (!enabled) {
+	// Panels (belowEditor) supersede the thin above-editor strip.
+	const panelsOn = isPanelsMasterEnabled();
+	if (!enabled || panelsOn) {
 		try {
 			ctx.ui.setWidget(WIDGET_KEY, undefined);
 		} catch {
@@ -1002,7 +1016,7 @@ export default function visageSkin(pi: ExtensionAPI) {
 
 	pi.registerCommand("visage", {
 		description:
-			"Visage UI: setup | show | doctor | footer | status | density | theme | header | widget",
+			"Visage UI: setup | show | doctor | footer | status | density | theme | header | widget | panels",
 		handler: async (args, ctx) => {
 			const parts = args.trim().split(/\s+/).filter(Boolean);
 			const [cmd, value] = parts;
@@ -1149,12 +1163,51 @@ export default function visageSkin(pi: ExtensionAPI) {
 					reportLines(ctx, ["Usage: /visage widget on|off"], "warning");
 					return;
 				}
+				if (value === "on" && isPanelsMasterEnabled()) {
+					reportLines(
+						ctx,
+						[
+							"Cannot enable thin context widget while status panels are on.",
+							"Panels already show context (Info). Disable with: /sp off",
+							"Then: /visage widget on",
+						],
+						"warning",
+					);
+					return;
+				}
 				config.widget = value === "on";
 				saveConfig(config);
 				applyContextWidget(pi, ctx, config.widget, config.density);
 				reportLines(ctx, [
 					`Context widget ${config.widget ? "on" : "off"}` +
 						(config.widget ? " (above editor via setWidget)" : ""),
+				]);
+				return;
+			}
+
+			if (cmd === "panels" || cmd === "sp") {
+				if (value === "on" || value === "off") {
+					const panels = loadPanelsConfig();
+					panels.enabled = value === "on";
+					if (value === "on") panels.panels = createPanelState(true);
+					savePanelsConfig(panels);
+					// Refresh thin widget suppression
+					applyContextWidget(pi, ctx, config.widget, config.density);
+					reportLines(ctx, [
+						`Status panels → ${value}`,
+						value === "on"
+							? "Open settings: /sp  or  Ctrl+Shift+P  (restart/reload if panels do not appear yet)"
+							: "Thin widget still follows /visage widget on|off",
+					]);
+					return;
+				}
+				reportLines(ctx, [
+					"Status panels (below editor): Git · Info · Session · System",
+					"  /sp                  — open settings overlay",
+					"  /sp on|off           — master toggle",
+					"  /visage panels on|off — same toggle",
+					"  Ctrl+Shift+P         — settings shortcut",
+					`  current: ${isPanelsMasterEnabled() ? "on" : "off"}`,
 				]);
 				return;
 			}
@@ -1195,7 +1248,8 @@ export default function visageSkin(pi: ExtensionAPI) {
 				"  /visage footer on|off",
 				"  /visage status on|off",
 				"  /visage header on|off",
-				"  /visage widget on|off",
+				"  /visage widget on|off      — thin strip (blocked if panels on)",
+				"  /visage panels | /sp       — status panels (below editor)",
 				"  /visage density comfortable|compact",
 				"  /visage theme dark|light|rose",
 			]);
